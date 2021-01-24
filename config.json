@@ -1,18 +1,22 @@
 {
   "Blue": {
     "Led": 20,
-    "Btn": 24
+    "Btn": 24,
+    "Sound":  440
   },
   "Red": {
     "Led": 21,
-    "Btn": 18
+    "Btn": 18,
+    "Sound": 494
   },
   "Green": {
     "Led": 19,
-    "Btn": 26
+    "Btn": 26,
+    "Sound": 523
   },
   "Yellow": {
     "Led": 5,
-    "Btn": 6
+    "Btn": 6,
+    "Sound": 587
   }
 }

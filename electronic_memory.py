@@ -23,13 +23,14 @@ debug_file = Path('debug.log').absolute().open('a')
 
 LED_OFF = GPIO.HIGH
 LED_ON = GPIO.LOW
+BZRPin = 4
 
 NULL = object()
 NOT_PUSHED = object()
 
 
 class Config:
-    __slots__ = ('leds', 'btns', 'combined')
+    __slots__ = ('leds', 'btns', 'sounds', 'led_sound', 'combined')
     config_file = Path('config.json').absolute()
 
     def __init__(self):
@@ -38,6 +39,8 @@ class Config:
         data = json.loads(self.config_file.read_text())
         self.leds = [v['Led'] for v in data.values()]
         self.btns = [v['Btn'] for v in data.values()]
+        self.sounds = [v['Sound'] for v in data.values()]
+        self.led_sound = {k: v for k, v in zip(self.leds, self.sounds)}
 
         self.combined = [(led, btn) for led, btn in zip(self.leds, self.btns)]
 
@@ -52,9 +55,11 @@ class MemoryGame:
 
     level: int = 1
     level_complete: Union[bool, object] = NULL
+    blink_time = 1
 
     led_sequence: List[int]
     btn_sequence: List[int]
+    passive_bzr = None
 
     pushed_btn: Queue = Queue()
     time_for_move: float = 15.0
@@ -69,11 +74,20 @@ class MemoryGame:
     def let_all_leds_blink(self) -> None:
         [self.led_blink(led, .5) for led in self.config.leds]
 
-    @staticmethod
-    def led_blink(led: int, sleep_time: float) -> None:
+    def led_blink(self, led: int, sleep_time: float) -> None:
         GPIO.output(led, LED_ON)
+        self.make_led_sound(led, sleep_time)
         time.sleep(sleep_time)
         GPIO.output(led, LED_OFF)
+
+    def make_led_sound(self, led: int, sleep_time: float) -> None:
+        self.make_sound(self.config.led_sound[led], sleep_time)
+
+    def make_sound(self, frequency: int, sleep_time: float) -> None:
+        self.passive_bzr.ChangeFrequency(frequency)
+        self.passive_bzr.start(25)
+        time.sleep(sleep_time)
+        self.passive_bzr.stop()
 
     def generate_sequence(self):
         sequence = random.choices(self.config.combined, k=self.level)
@@ -85,8 +99,8 @@ class MemoryGame:
         self.let_all_leds_blink()
         time.sleep(1)
         for led in self.led_sequence:
-            self.led_blink(led, 5)
-            time.sleep(.5)
+            self.led_blink(led, self.blink_time)
+            time.sleep(.3)
         print(f'{dt.now()}: {self.led_sequence = }', file=debug_file, flush=True)
 
     def check_pushed_btn(self):
@@ -113,7 +127,7 @@ class MemoryGame:
         if not self.restarting_game:
             if GPIO.input(btn) == GPIO.LOW:
                 self.pushed_btn.queue.append(btn)
-                self.led_blink(led, 1)
+                self.led_blink(led, .8)
                 self.check_pushed_btn()
 
     def check_btn_gpio_input(self):
@@ -177,11 +191,17 @@ class MemoryGame:
                    pull_up_down=GPIO.PUD_UP)
         return
 
+    def setup_bzr(self) -> None:
+        GPIO.setup(BZRPin, GPIO.OUT)   # Set pin mode as output
+        GPIO.output(BZRPin, GPIO.LOW)
+        self.passive_bzr = GPIO.PWM(BZRPin, 784)
+
     def setup(self) -> None:
         GPIO.setmode(GPIO.BCM)
         # using breakout board pin numbering
         [self.setup_led(led) for led in self.config.leds]
         [self.setup_btn(btn) for btn in self.config.btns]
+        self.setup_bzr()
         return
 
     def warm_up(self, sleeping_time: float = .5) -> None:
